@@ -1,0 +1,130 @@
+name: Deploy GitHub Readme Stats to VPS
+
+on:
+  push:
+    branches:
+      - master
+      - main
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  commit-hash:
+    runs-on: ubuntu-latest
+    outputs:
+      commit_hash: ${{ steps.get_commit.outputs.commit_hash }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get commit hash
+        id: get_commit
+        run: echo "commit_hash=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+  build-and-push-image:
+    needs: commit-hash
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Build and push Docker image
+        run: |
+          docker buildx build --platform linux/amd64 --load \
+            --build-arg COMMIT_SHA=${{ needs.commit-hash.outputs.commit_hash }} \
+            -t ghcr.io/maxh33/github-readme-stats:prod -f Dockerfile.prod .
+          docker push ghcr.io/maxh33/github-readme-stats:prod
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push-image
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy deployment files to VPS
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_KEY }}
+          passphrase: ${{ secrets.VPS_PASSPHRASE }}
+          port: 22
+          source: "docker-compose.prod.yml,DOCKER_SETUP.md,claude.md"
+          target: "~/github-readme-stats"
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_KEY }}
+          passphrase: ${{ secrets.VPS_PASSPHRASE }}
+          port: 22
+          script: |
+            cd ~/github-readme-stats
+
+            # Create env file for GitHub authentication and PAT tokens
+            echo "GITHUB_USER=maxh33" > .env
+            echo "GITHUB_TOKEN=${{ secrets.GHCR_TOKEN }}" >> .env
+
+            # Add GitHub Personal Access Tokens for API access
+            echo "PAT_1=${{ secrets.GH_PAT_1 }}" >> .env
+            echo "PAT_2=${{ secrets.GH_PAT_2 }}" >> .env
+            echo "PAT_3=${{ secrets.GH_PAT_3 }}" >> .env
+            echo "PAT_4=${{ secrets.GH_PAT_4 }}" >> .env
+
+            # Verify .env file exists without exposing contents
+            if [ -f .env ]; then
+              echo "✅ Environment configuration file created successfully"
+              echo "📋 Environment variables count: $(grep -c '^[^#]' .env || echo '0')"
+            else
+              echo "❌ Environment configuration file not found"
+            fi
+
+            # Copy the production compose file as main file
+            cp docker-compose.prod.yml docker-compose.yml
+
+            # Check if shared monitoring is running
+            if ! docker ps | grep -q "traefik"; then
+              echo "⚠️  Warning: Traefik not found. Please ensure shared monitoring is running."
+              echo "Run: cd ~/shared/monitoring && docker compose up -d"
+            fi
+
+            # Login to GitHub Container Registry
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u maxh33 --password-stdin
+
+            # Stop current containers before starting new ones
+            echo "Stopping production containers..."
+            docker compose -f docker-compose.yml down || true
+
+            # Start with new configuration
+            echo "Starting production container..."
+            docker compose pull
+            docker compose up -d --force-recreate
+
+            # Check everything is running
+            echo "Verifying service is running..."
+            docker ps --filter "name=github-readme-stats"
+
+            # Wait a few seconds for startup
+            sleep 5
+
+            # Test the production endpoint
+            echo "Testing production endpoint:"
+            curl -k -s -o /dev/null -w "%{http_code} " https://stats.maxhaider.dev/api/ || echo "Not yet available (might be starting)"
+
+            echo "✅ Deployment complete!"
