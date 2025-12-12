@@ -42,7 +42,7 @@ services:
 
     # Bind to localhost only
     ports:
-      - "127.0.0.1:3001:3000"
+      - "127.0.0.1:3002:3000"
 
     hostname: github-readme-stats
     dns:
