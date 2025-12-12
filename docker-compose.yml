@@ -1,0 +1,28 @@
+version: '3.8'
+
+networks:
+  github_readme_stats_network:
+    external: false
+
+services:
+  github-readme-stats:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: github-readme-stats
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=${PORT:-3000}
+      - HOSTNAME=0.0.0.0
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.github-readme-stats.rule=Host(`stats.maxhaider.dev`)"
+      - "traefik.http.routers.github-readme-stats.entrypoints=websecure"
+      - "traefik.http.routers.github-readme-stats.tls=true"
+      - "traefik.http.routers.github-readme-stats.tls.certresolver=myresolver"
+      - "traefik.http.services.github-readme-stats.loadbalancer.server.port=${PORT:-3000}"
+    ports:
+      - "${HOST_PORT:-3000}:${PORT:-3000}"
+    networks:
+      - github_readme_stats_network

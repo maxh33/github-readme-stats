@@ -1,0 +1,81 @@
+networks:
+  monitoring_shared_monitoring_network:
+    external: true
+
+services:
+  github-readme-stats:
+    image: ghcr.io/maxh33/github-readme-stats:prod
+    container_name: github-readme-stats
+    restart: unless-stopped
+
+    # Security hardening
+    security_opt:
+      - no-new-privileges:true
+    user: "${UID:-1001}:${GID:-1001}"
+    read_only: true
+
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      # GitHub Personal Access Tokens for higher rate limits
+      - PAT_1=${PAT_1}
+      - PAT_2=${PAT_2:-}
+      - PAT_3=${PAT_3:-}
+      - PAT_4=${PAT_4:-}
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.github-readme-stats.rule=Host(`stats.maxhaider.dev`)"
+      - "traefik.http.routers.github-readme-stats.entrypoints=websecure"
+      - "traefik.http.routers.github-readme-stats.tls=true"
+      - "traefik.http.routers.github-readme-stats.tls.certresolver=myresolver"
+      - "traefik.http.services.github-readme-stats.loadbalancer.server.port=3000"
+      - "com.centurylinklabs.watchtower.enable=true"
+      # Security labels
+      - "security.non-root=true"
+      - "security.read-only=true"
+      - "traefik.http.routers.github-readme-stats.priority=100"
+      - "prometheus.scrape=true"
+      - "prometheus.port=3000"
+      - "prometheus.path=/api/metrics"
+
+    # Bind to localhost only
+    ports:
+      - "127.0.0.1:3001:3000"
+
+    hostname: github-readme-stats
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+      - 8.8.4.4
+      - 1.0.0.1
+
+    # Temporary filesystems for writable areas
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+      - /var/cache:noexec,nosuid,size=50m
+
+    # Minimal capabilities
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -O /dev/null -q --timeout=5 http://127.0.0.1:3000/api/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    networks:
+      - monitoring_shared_monitoring_network
