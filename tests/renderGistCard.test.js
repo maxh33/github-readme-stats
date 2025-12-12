@@ -3,7 +3,7 @@ import { queryByTestId } from "@testing-library/dom";
 import "@testing-library/jest-dom";
 import { cssToObject } from "@uppercod/css-to-object";
 import { renderGistCard } from "../src/cards/gist.js";
-import { themes } from "../themes/index.js";
+import { themes } from "../src/themes/index.js";
 
 /**
  * @type {import("../src/fetchers/gist").GistData}

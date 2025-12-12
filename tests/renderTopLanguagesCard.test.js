@@ -21,7 +21,7 @@ import {
   trimTopLanguages,
 } from "../src/cards/top-languages.js";
 
-import { themes } from "../themes/index.js";
+import { themes } from "../src/themes/index.js";
 
 const langs = {
   HTML: {

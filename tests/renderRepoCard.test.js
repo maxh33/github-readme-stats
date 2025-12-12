@@ -3,7 +3,7 @@ import { queryByTestId } from "@testing-library/dom";
 import "@testing-library/jest-dom";
 import { cssToObject } from "@uppercod/css-to-object";
 import { renderRepoCard } from "../src/cards/repo.js";
-import { themes } from "../themes/index.js";
+import { themes } from "../src/themes/index.js";
 
 const data_repo = {
   repository: {
