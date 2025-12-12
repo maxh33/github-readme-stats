@@ -1,10 +1,29 @@
+# ================================================================
+# GitHub README Stats - Production Docker Compose Configuration
+# ================================================================
+#
+# Environment Variables Required:
+# - STATS_DOMAIN: Domain for Traefik routing (e.g., stats.yourdomain.com)
+# - BIND_ADDRESS: Host bind address (default: 127.0.0.1)
+# - BIND_PORT: Host bind port (default: 3000)
+# - PAT_1: GitHub Personal Access Token (required)
+# - PAT_2, PAT_3, PAT_4: Additional tokens (optional)
+#
+# Configuration:
+# 1. Copy .env.example to .env
+# 2. Edit .env with your values
+# 3. Run: docker compose -f docker-compose.prod.yml up -d
+#
+# For detailed setup instructions, see: DOCKER_DEPLOYMENT.md
+# ================================================================
+
 networks:
   monitoring_shared_monitoring_network:
     external: true
 
 services:
   github-readme-stats:
-    image: ghcr.io/maxh33/github-readme-stats:prod
+    image: ${REGISTRY_URL}/github-readme-stats:prod
     container_name: github-readme-stats
     restart: unless-stopped
 
@@ -26,7 +45,7 @@ services:
 
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.github-readme-stats.rule=Host(`stats.maxhaider.dev`)"
+      - "traefik.http.routers.github-readme-stats.rule=Host(`${STATS_DOMAIN}`)"
       - "traefik.http.routers.github-readme-stats.entrypoints=websecure"
       - "traefik.http.routers.github-readme-stats.tls=true"
       - "traefik.http.routers.github-readme-stats.tls.certresolver=myresolver"
@@ -41,8 +60,9 @@ services:
       - "prometheus.path=/api/metrics"
 
     # Bind to localhost only
+    # Configurable via BIND_ADDRESS and BIND_PORT environment variables
     ports:
-      - "127.0.0.1:3002:3000"
+      - "${BIND_ADDRESS:-127.0.0.1}:${BIND_PORT:-3000}:3000"
 
     hostname: github-readme-stats
     dns:
@@ -67,8 +87,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '0.5'              # Maximum CPU cores (0.5 = 50% of one core)
+          memory: 512M             # Maximum memory usage
+        reservations:
+          cpus: '0.25'             # Minimum guaranteed CPU
+          memory: 256M             # Minimum guaranteed memory
 
     healthcheck:
       test: ["CMD", "sh", "-c", "wget -O /dev/null -q --timeout=5 http://127.0.0.1:3000/api/ || exit 1"]

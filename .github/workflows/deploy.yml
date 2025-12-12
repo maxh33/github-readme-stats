@@ -1,3 +1,23 @@
+# ================================================================
+# GitHub README Stats - CI/CD Deployment Workflow
+# ================================================================
+#
+# This workflow automatically builds and deploys the application to your VPS
+# when you push to master or main branch.
+#
+# Required GitHub Secrets (Settings → Secrets and variables → Actions):
+# - DEPLOY_DOMAIN: Your deployment domain (e.g., stats.yourdomain.com)
+# - BIND_PORT: Port to bind on VPS (e.g., 3002)
+# - VPS_HOST: Your VPS IP address or hostname
+# - VPS_USER: SSH username for VPS
+# - VPS_KEY: SSH private key for authentication
+# - VPS_PASSPHRASE: SSH key passphrase (if encrypted)
+# - GHCR_TOKEN: GitHub Container Registry token
+# - GH_PAT_1: GitHub Personal Access Token (required)
+# - GH_PAT_2, GH_PAT_3, GH_PAT_4: Additional tokens (optional)
+#
+# ================================================================
+
 name: Deploy GitHub Readme Stats to VPS
 
 on:
@@ -45,8 +65,8 @@ jobs:
         run: |
           docker buildx build --platform linux/amd64 --load \
             --build-arg COMMIT_SHA=${{ needs.commit-hash.outputs.commit_hash }} \
-            -t ghcr.io/maxh33/github-readme-stats:prod -f Dockerfile.prod .
-          docker push ghcr.io/maxh33/github-readme-stats:prod
+            -t ghcr.io/${{ github.repository_owner }}/github-readme-stats:prod -f Dockerfile.prod .
+          docker push ghcr.io/${{ github.repository_owner }}/github-readme-stats:prod
 
   deploy:
     runs-on: ubuntu-latest
@@ -77,9 +97,16 @@ jobs:
           script: |
             cd ~/github-readme-stats
 
-            # Create env file for GitHub authentication and PAT tokens
-            echo "GITHUB_USER=maxh33" > .env
+            # Create env file for deployment configuration
+            echo "GITHUB_USER=${{ github.repository_owner }}" > .env
             echo "GITHUB_TOKEN=${{ secrets.GHCR_TOKEN }}" >> .env
+            echo "REGISTRY_URL=ghcr.io/${{ github.repository_owner }}" >> .env
+
+            # Deployment domain configuration
+            echo "DEPLOY_DOMAIN=${{ secrets.DEPLOY_DOMAIN }}" >> .env
+            echo "STATS_DOMAIN=${{ secrets.DEPLOY_DOMAIN }}" >> .env
+            echo "BIND_ADDRESS=127.0.0.1" >> .env
+            echo "BIND_PORT=${{ secrets.BIND_PORT || '3000' }}" >> .env
 
             # Add GitHub Personal Access Tokens for API access
             echo "PAT_1=${{ secrets.GH_PAT_1 }}" >> .env
@@ -105,7 +132,7 @@ jobs:
             fi
 
             # Login to GitHub Container Registry
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u maxh33 --password-stdin
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
 
             # Stop current containers before starting new ones
             echo "Stopping production containers..."
@@ -125,6 +152,6 @@ jobs:
 
             # Test the production endpoint
             echo "Testing production endpoint:"
-            curl -k -s -o /dev/null -w "%{http_code} " https://stats.maxhaider.dev/api/ || echo "Not yet available (might be starting)"
+            curl -k -s -o /dev/null -w "%{http_code} " https://${{ secrets.DEPLOY_DOMAIN }}/api/ || echo "Not yet available (might be starting)"
 
             echo "✅ Deployment complete!"
